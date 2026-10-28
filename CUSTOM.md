@@ -36,3 +36,8 @@ GitHub's *Sync fork*. Keep `versionName`'s suffix in step with upstream's versio
 
 `local/` (keystore, `signing.properties`, `local.properties`) is gitignored and must be backed up
 elsewhere: lose the key and every later build needs an uninstall, which wipes the TV's settings.
+The certificate's SHA-256 is only a fingerprint to check a build against — it is printed by
+`apksigner verify --print-certs` whenever it is needed, and is not a secret to keep.
+
+**Bump `versionCode` for every build that goes on the TV** (`81`, `82`, …): Android refuses to
+`install -r` a lower code over a higher one, and the failure reads as a signature error.
