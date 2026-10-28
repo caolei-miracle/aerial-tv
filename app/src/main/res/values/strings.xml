@@ -220,6 +220,15 @@
     <string name="weather_snow">Snow</string>
     <string name="weather_thunder">Thunderstorms</string>
     <string name="weather_high_low">H:%1$d°  L:%2$d°</string>
+    <string name="cc_weather">Weather</string>
+    <string name="weather_humidity">Humidity</string>
+    <string name="weather_wind">Wind</string>
+    <string name="weather_apparent">Feels like</string>
+    <string name="weather_air">Air quality</string>
+    <string name="weather_beaufort">%1$d bft</string>
+    <string name="weather_today">Today</string>
+    <string name="weather_page_source">Weather, wind and air from Open-Meteo. The city is set on the phone page.</string>
+    <string name="weather_page_source_guessed">Place guessed from the network. Scan the code in Personalization to set the city.</string>
     <string name="st_columns">Apps per Row</string>
     <string name="st_columns_hint">How many apps fit across Home, and in folders. Six shows more at a glance; four makes them larger, easier to see from across the room.</string>
     <string name="st_peek">Second Row</string>

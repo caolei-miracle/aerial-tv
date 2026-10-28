@@ -219,6 +219,15 @@
     <string name="weather_snow">雪</string>
     <string name="weather_thunder">雷雨</string>
     <string name="weather_high_low">最高 %1$d°  最低 %2$d°</string>
+    <string name="cc_weather">天气</string>
+    <string name="weather_humidity">湿度</string>
+    <string name="weather_wind">风</string>
+    <string name="weather_apparent">体感</string>
+    <string name="weather_air">空气质量</string>
+    <string name="weather_beaufort">%1$d 级</string>
+    <string name="weather_today">今天</string>
+    <string name="weather_page_source">天气与空气数据来自 Open-Meteo。城市在手机页面设置。</string>
+    <string name="weather_page_source_guessed">位置按网络自动判断。想换城市，扫「个性化」里的二维码。</string>
     <string name="st_columns">每排 App</string>
     <string name="st_columns_hint">主屏幕和文件夹里每排放几个 App。6 个一眼看到更多；4 个图标更大，离得远也看得清。</string>
     <string name="st_peek">第二排</string>

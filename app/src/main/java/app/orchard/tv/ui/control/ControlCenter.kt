@@ -91,6 +91,8 @@ import app.orchard.tv.ui.components.consumeTaps
 import app.orchard.tv.ui.components.dismissOnTap
 import app.orchard.tv.ui.components.liquidGlass
 import app.orchard.tv.ui.home.MenuRow
+import app.orchard.tv.ui.home.glyphFor
+import app.orchard.tv.ui.weather.conditionText
 import app.orchard.tv.ui.home.VpnBadge
 import app.orchard.tv.ui.home.dateText
 import app.orchard.tv.ui.home.timeText
@@ -100,6 +102,7 @@ import app.orchard.tv.ui.theme.Motion
 import app.orchard.tv.ui.theme.Palette
 import app.orchard.tv.ui.theme.Type
 import app.orchard.tv.update.Updates
+import app.orchard.tv.weather.Weather
 import app.orchard.tv.wallpaper.PhoneServer
 import java.time.LocalDateTime
 
@@ -258,6 +261,16 @@ private fun MainPage(vm: HomeViewModel, now: LocalDateTime, takeFocus: Boolean, 
         BrightnessRow(vm)
 
         Spacer(Modifier.height(6.dp))
+        // What the clock's four lines cannot hold: the days ahead, the wind, the air.
+        Weather.now?.let { w ->
+            val place = Weather.place?.takeIf { it.length <= 12 }
+            MenuRow(
+                glyphFor(w),
+                listOfNotNull(stringResource(R.string.cc_weather), place, "${w.celsius}° ${conditionText(w.kind)}").joinToString(" · "),
+                onClick = { vm.overlay = Overlay.Weather },
+                trailing = "›",
+            )
+        }
         // How Home looks (wallpaper, screensaver, focus style, hidden apps, weather) lives in one place.
         MenuRow(
             Glyph.Photo,
