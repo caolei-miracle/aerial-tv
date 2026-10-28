@@ -57,7 +57,9 @@ fun WeatherPage(visible: Boolean, onDismiss: () -> Unit) {
         exit = fadeOut(tween(160, easing = Motion.EaseOut)),
         modifier = Modifier.fillMaxSize(),
     ) {
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)))
+        // Home's own content is gone while this page is open (HomeScreen), so the wallpaper can stay
+        // here: this much black over it keeps the page's type plain to read.
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.72f)))
     }
 
     AnimatedVisibility(
