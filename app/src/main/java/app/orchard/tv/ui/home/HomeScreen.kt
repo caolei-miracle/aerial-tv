@@ -745,10 +745,23 @@ fun HomeScreen(
             // Before Android 7 there is no picture of Home under Control Center (issue #466), so the
             // GPU draws every tile again under the panel each frame. Lite there once let the clock and
             // tiles fade out under the veil; Home looked gone behind the panel (issue #823), so they stay.
+            // The weather page is a page of its own, not a panel beside Home: the clock, the weather
+            // lines and the tiles go while it is open. At 12% they still read through it, the white
+            // clock most of all, and sat inside the page's own type.
+            val pageCover by animateFloatAsState(
+                if (overlay is Overlay.Weather) 1f else 0f,
+                tween(260, easing = Motion.EaseOut), label = "page-cover",
+            )
             Box(
                 Modifier
                     .fillMaxSize()
-                    .offset { IntOffset(0, -scroll.value.roundToInt()) },
+                    .offset { IntOffset(0, -scroll.value.roundToInt()) }
+                    .then(
+                        if (pageCover > 0.01f) Modifier.graphicsLayer {
+                            alpha = 1f - pageCover
+                            compositingStrategy = CompositingStrategy.ModulateAlpha
+                        } else Modifier,
+                    ),
             ) {
                 val clockRight = AerialSettings.clockRight
                 // The large clock stands over the top row; the small one is the time and weather in
