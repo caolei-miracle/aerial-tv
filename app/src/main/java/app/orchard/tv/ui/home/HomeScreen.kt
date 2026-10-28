@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -84,6 +85,7 @@ import app.orchard.tv.ui.components.liquidGlass
 import app.orchard.tv.ui.theme.LocalReducedMotion
 import app.orchard.tv.ui.theme.Motion
 import app.orchard.tv.ui.theme.Type
+import app.orchard.tv.ui.weather.WeatherPage
 import androidx.compose.runtime.snapshotFlow
 import app.orchard.tv.system.DiagLog
 import app.orchard.tv.system.SystemProbe
@@ -121,9 +123,9 @@ private val LargeClockTop = 80.dp
 
 /**
  * From the large clock's top to where the shelf may start: its weather line ends some 136 dp down
- * (216 dp from the top, MiTV-MFTR0, 1.65), and a gap.
+ * (216 dp from the top, MiTV-MFTR0, 1.65), and a gap. The line of days ahead adds 20 dp under it.
  */
-private val LargeClockHeight = 152.dp
+private val LargeClockHeight = 172.dp
 
 /**
  * The highest the large clock may go to make room for two rows, level with the status pill. Only
@@ -133,6 +135,22 @@ private val LargeClockTopMin = 28.dp
 
 /** How much taller the glass plate grows to hold the top row's names, with the second row kept clear of it. */
 private val PlateNameRoom = 28.dp
+
+/**
+ * How much the plate grows upward to hold the focused app's name at its top left, as tvOS 26 has it
+ * (the name over the glass, not under the tile): a 28 sp line, with a little air above and below.
+ */
+private val PlateTitleRoom = 42.dp
+
+/** Under this the name would not fit, and it goes without one rather than press on the weather line. */
+private val PlateTitleMin = 28.dp
+
+/**
+ * Where the large clock's weather line really ends: [LargeClockHeight] keeps 16 dp of air under it,
+ * which the name's plate may borrow, and [PlateTitleGap] of air is left between them still.
+ */
+private val PlateTitleSlack = 16.dp
+private val PlateTitleGap = 10.dp
 
 /** Control Center has been drawn once in this process (HomeScreen's warm-up). */
 private object ControlCenterWarmed { var done = false }
@@ -158,7 +176,7 @@ internal fun gridGap(columns: Int): Dp = when (columns) {
 internal fun restTileWidth(screenW: Dp, columns: Int): Dp = (screenW - GridMargin * 2 - gridGap(columns) * (columns - 1)) / columns
 
 /** Grid geometry for the screen at hand. On a 1080p TV this is a 960×540 dp canvas. */
-private class GridMetrics(screenW: Dp, screenH: Dp, val columns: Int, oneRow: Boolean, plateNames: Boolean, peek: Boolean, plate: Boolean, largeClock: Boolean, clockRight: Boolean) {
+private class GridMetrics(screenW: Dp, screenH: Dp, val columns: Int, oneRow: Boolean, plateNames: Boolean, peek: Boolean, plate: Boolean, largeClock: Boolean, clockRight: Boolean, title: Boolean) {
     val margin = GridMargin
     val gap = gridGap(columns)
     val tileW = restTileWidth(screenW, columns)
@@ -222,6 +240,20 @@ private class GridMetrics(screenW: Dp, screenH: Dp, val columns: Int, oneRow: Bo
      */
     val restY = maxOf(screenH * 0.37f, RowAboveTop + pitchY)
     val screenH = screenH
+
+    /**
+     * How far the plate grows upward for the focused app's name at its top left (PlateTitle), 0 when
+     * it does not: with no plate, or every name already on it. Never up into the weather line: what
+     * the clock leaves under it, less a gap, capped at the room a name needs. Under that the name is
+     * left off rather than squeezed.
+     */
+    val titleRoom: Dp = if (!title || !plate) 0.dp else {
+        val ceiling = if (largeClock) clockY + LargeClockHeight - PlateTitleSlack + PlateTitleGap else 0.dp
+        (topRowY - PlatePadV - ceiling).coerceAtMost(PlateTitleRoom).takeIf { it >= PlateTitleMin } ?: 0.dp
+    }
+
+    /** Where that name's band starts: the plate's top edge, now [titleRoom] higher. */
+    val titleY: Dp = topRowY - PlatePadV - titleRoom
 
     /**
      * How far the grid scrolls before the shelf has given way: the clock and the plate fade over
@@ -525,8 +557,11 @@ fun HomeScreen(
         val hasPlate = AerialSettings.homePlate
         val largeClock = AerialSettings.largeClock
         val clockRightNow = AerialSettings.clockRight
+        // The plate shows the focused app's name itself, at its top left (PlateTitle), unless every
+        // name goes on it: then the top row's names are there already (issue: names on the glass).
+        val plateTitle = AerialSettings.homePlate && !plateNames
         val metrics = remember(maxWidth, maxHeight, columns, oneRow, plateNames, peek, hasPlate, largeClock, clockRightNow) {
-            GridMetrics(maxWidth, maxHeight, columns, oneRow, plateNames, peek, hasPlate, largeClock, clockRightNow)
+            GridMetrics(maxWidth, maxHeight, columns, oneRow, plateNames, peek, hasPlate, largeClock, clockRightNow, plateTitle)
         }
         val collapsePx = with(density) { metrics.collapse.toPx() }
 
@@ -658,7 +693,7 @@ fun HomeScreen(
                 val second = if (metrics.shelfRows > 1) metrics.shelfSecond else 0.dp
                 Rect(
                     (metrics.margin - PlatePadH).toPx(),
-                    (metrics.topRowY - PlatePadV).toPx(),
+                    metrics.titleY.toPx(),
                     (metrics.margin + metrics.pitchX * (columns - 1) + metrics.tileW + PlatePadH).toPx(),
                     (metrics.topRowY + metrics.tileH + PlatePadV + metrics.firstGap + second).toPx(),
                 )
@@ -742,6 +777,27 @@ fun HomeScreen(
                             },
                         toSaver = { toSaver.value },
                         saving = vm.screensaverVisible,
+                    )
+                }
+
+                // The focused app's name on the glass plate, at its top left, as tvOS 26 shows it:
+                // on the plate the top row's names are off the tiles, so this is where they read.
+                // Only while focus is on the shelf, with nothing over Home.
+                if (metrics.titleRoom > 0.dp) {
+                    val titled = apps.getOrNull(focusedIndex)?.takeIf {
+                        !pillFocused && overlay == Overlay.None && moving == null && !vm.screensaverVisible &&
+                            focusedIndex < columns * metrics.shelfRows
+                    }
+                    PlateTitle(
+                        label = titled?.label,
+                        room = metrics.titleRoom,
+                        fade = {
+                            (1f - (scroll.value / collapsePx * 1.6f).coerceIn(0f, 1f)) *
+                                (1f - (toSaver.value * 2f).coerceIn(0f, 1f))
+                        },
+                        modifier = Modifier
+                            .offset(x = metrics.margin, y = metrics.titleY)
+                            .width(metrics.tileW * columns + metrics.gap * (columns - 1)),
                     )
                 }
 
@@ -935,6 +991,11 @@ fun HomeScreen(
             onOpen = { vm.overlay = Overlay.None; onOpen(it) },
             onClose = { vm.overlay = Overlay.None },
             warm = ccWarm,
+        )
+
+        WeatherPage(
+            visible = overlay is Overlay.Weather,
+            onDismiss = { vm.overlay = Overlay.ControlCenter() },
         )
 
         FolderView(

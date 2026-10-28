@@ -15,6 +15,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
@@ -63,6 +64,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
@@ -105,6 +107,9 @@ import app.orchard.tv.ui.theme.Type
 import app.orchard.tv.weather.Weather
 import app.orchard.tv.weather.WeatherKind
 import app.orchard.tv.weather.WeatherNow
+import app.orchard.tv.ui.weather.conditionText
+import app.orchard.tv.ui.weather.dayLine
+import app.orchard.tv.ui.weather.greetingOf
 import java.text.SimpleDateFormat
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -619,10 +624,13 @@ fun ShelfClock(
         compositingStrategy = CompositingStrategy.ModulateAlpha
     }
     Column(modifier, horizontalAlignment = if (alignEnd) Alignment.End else Alignment.Start) {
-        // On a TV set to Chinese, the Chinese calendar's date follows, as on the iPhone's lock screen.
+        // On a TV set to Chinese, the Chinese calendar's date follows, as on the iPhone's lock screen,
+        // and the greeting leads the line: no line of its own, the wallpaper is the point.
         val lunar = if (Locale.getDefault().language == "zh") Lunar.text(now.toLocalDate()) else null
+        val greeting = greetingOf(now.hour)
         BasicText(
             buildAnnotatedString {
+                if (greeting != null) withStyle(SpanStyle(color = dim, fontWeight = FontWeight.W500)) { append("$greeting  ") }
                 append(dateText(now))
                 if (lunar != null) withStyle(SpanStyle(color = dim, fontWeight = FontWeight.W500)) { append("  $lunar") }
             },
@@ -648,6 +656,20 @@ fun ShelfClock(
                         withStyle(SpanStyle(color = dim, fontWeight = FontWeight.W500)) { append("  $detail") }
                     },
                     style = Type.ClockDetail.copy(shadow = shadow),
+                )
+            }
+            // The days ahead in one quiet line under the weather: same edge, no plate, so the
+            // wallpaper keeps everything the words do not need.
+            val ahead = w.ahead
+            if (ahead.isNotEmpty()) {
+                val line = ahead.mapIndexed { i, d ->
+                    dayLine(i, d.date, conditionText(d.kind), d.high, d.low)
+                }.joinToString("   ·   ")
+                BasicText(
+                    line,
+                    style = Type.Caption.copy(color = Color.White.copy(alpha = 0.8f), shadow = shadow, fontSize = 13.sp),
+                    modifier = aside.padding(top = 9.dp).capBox(13.sp),
+                    maxLines = 1,
                 )
             }
         }
@@ -750,7 +772,7 @@ fun CornerClock(now: LocalDateTime, modifier: Modifier = Modifier, toSaver: () -
     }
 }
 
-private fun glyphFor(w: WeatherNow): Glyph = when (w.kind) {
+fun glyphFor(w: WeatherNow): Glyph = when (w.kind) {
     WeatherKind.Clear -> if (w.day) Glyph.Sun else Glyph.Moon
     WeatherKind.PartlyCloudy -> if (w.day) Glyph.CloudSun else Glyph.Cloud
     WeatherKind.Cloudy -> Glyph.Cloud
@@ -820,6 +842,54 @@ fun StatusPill(
                 BasicText(timeText(now), style = Type.Headline.copy(color = fg))
             }
             GlyphIcon(Glyph.Switches, fg, 17.dp)
+        }
+    }
+}
+
+/**
+ * The focused app's name at the top left of the glass plate, as tvOS 26 has it: it crossfades as
+ * focus moves along the row and fades out with the row over the grid, and it stays within the band
+ * the plate grew for it ([GridMetrics.titleRoom]), so it never reaches the weather line above.
+ *
+ * @param fade the plate's own fade, read while drawing, so the name goes with it.
+ */
+@Composable
+fun PlateTitle(
+    label: String?,
+    room: Dp,
+    fade: () -> Float,
+    modifier: Modifier = Modifier,
+) {
+    // A name of its own is kept while the last one fades out.
+    var shown by remember { mutableStateOf(label.orEmpty()) }
+    LaunchedEffect(label) { if (label != null && label.isNotEmpty()) shown = label }
+    val present by animateFloatAsState(
+        if (label != null) 1f else 0f,
+        tween(if (label != null) 200 else 140, easing = Motion.EaseOut),
+        label = "plate-title",
+    )
+    if (present < 0.005f) return
+    Box(modifier.height(room), contentAlignment = Alignment.CenterStart) {
+        Crossfade(
+            shown,
+            animationSpec = tween(150, easing = Motion.EaseOut),
+            modifier = Modifier.graphicsLayer {
+                alpha = present * fade()
+                compositingStrategy = CompositingStrategy.ModulateAlpha
+            },
+            label = "plate-title-name",
+        ) { text ->
+            BasicText(
+                text = text,
+                style = Type.LargeTitle.copy(
+                    fontSize = 28.sp,
+                    color = Color.White,
+                    // Over the glass it reads on its own; the shadow only steadies it on a bright one.
+                    shadow = Shadow(Color.Black.copy(alpha = 0.35f), blurRadius = 10f),
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
