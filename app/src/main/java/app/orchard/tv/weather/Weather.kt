@@ -13,18 +13,45 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.time.LocalDate
 import java.util.Locale
 import javax.net.ssl.SSLException
 import kotlin.math.roundToInt
 
 enum class WeatherKind { Clear, PartlyCloudy, Cloudy, Fog, Rain, Snow, Thunder }
 
-/** [high] and [low] are today's, shown under the large clock; null in a reading saved by an older version. */
-data class WeatherNow(val celsius: Int, val kind: WeatherKind, val day: Boolean, val high: Int? = null, val low: Int? = null)
+/** One of the days ahead, as the forecast strip shows it. */
+data class WeatherDay(val date: LocalDate, val kind: WeatherKind, val high: Int, val low: Int)
+
+/**
+ * What Home shows, and what the weather page details. [days] holds today and the days after it
+ * (Open-Meteo gives up to 16; Aerial asks for a week); [aqi] is China's AQI worked out from PM2.5
+ * and PM10, the scale the owner reads on a Chinese phone. [high] and [low] are today's, shown under
+ * the large clock; null in a reading saved by an older version.
+ */
+data class WeatherNow(
+    val celsius: Int,
+    val kind: WeatherKind,
+    val day: Boolean,
+    val high: Int? = null,
+    val low: Int? = null,
+    val humidity: Int? = null,
+    val apparent: Int? = null,
+    val windKmh: Int? = null,
+    val windDir: Int? = null,
+    val days: List<WeatherDay> = emptyList(),
+    val aqi: Int? = null,
+    val pm25: Int? = null,
+    val fetchedAt: Long = 0L,
+) {
+    /** The days after today, as the clock's one quiet line shows them (at most three). */
+    val ahead: List<WeatherDay> get() = days.drop(1).take(3)
+}
 
 /**
  * The weather beside the home clock, from Open-Meteo: no key, reachable from China. The place is
@@ -45,6 +72,9 @@ object Weather {
     private const val STALE_MS = 3 * 60 * 60 * 1000L
     /** Stands for "no high or low" in the prefs. */
     private const val NONE = Int.MIN_VALUE
+
+    /** How many days the forecast holds, today included. */
+    const val FORECAST_DAYS = 7
 
     var now by mutableStateOf<WeatherNow?>(null); private set
 
@@ -69,14 +99,59 @@ object Weather {
         place = prefs.getString("place", null)
         chosen = prefs.getBoolean("chosen", false)
         if (System.currentTimeMillis() - prefs.getLong("fetched_at", 0) < STALE_MS) {
-            val kind = runCatching { WeatherKind.valueOf(prefs.getString("kind", null) ?: "") }.getOrNull()
-            if (kind != null) now = WeatherNow(
-                prefs.getInt("celsius", 0), kind, prefs.getBoolean("day", true),
-                high = prefs.getInt("high", NONE).takeIf { it != NONE },
-                low = prefs.getInt("low", NONE).takeIf { it != NONE },
-            )
+            now = prefs.getString("reading", null)?.let { parse(it) } ?: legacy()
         }
     }
+
+    /** A reading saved by a version that kept only the temperature, today's high and low. */
+    private fun legacy(): WeatherNow? {
+        val kind = runCatching { WeatherKind.valueOf(prefs.getString("kind", null) ?: "") }.getOrNull() ?: return null
+        return WeatherNow(
+            prefs.getInt("celsius", 0), kind, prefs.getBoolean("day", true),
+            high = prefs.getInt("high", NONE).takeIf { it != NONE },
+            low = prefs.getInt("low", NONE).takeIf { it != NONE },
+            fetchedAt = prefs.getLong("fetched_at", 0),
+        )
+    }
+
+    private fun parse(text: String): WeatherNow? = runCatching {
+        val o = JSONObject(text)
+        fun intOrNull(key: String) = if (o.has(key)) o.getInt(key) else null
+        val days = o.optJSONArray("days")?.let { a ->
+            (0 until a.length()).mapNotNull { i ->
+                val d = a.optJSONArray(i) ?: return@mapNotNull null
+                val kind = runCatching { WeatherKind.valueOf(d.getString(1)) }.getOrNull() ?: return@mapNotNull null
+                WeatherDay(LocalDate.parse(d.getString(0)), kind, d.getInt(2), d.getInt(3))
+            }
+        }.orEmpty()
+        WeatherNow(
+            celsius = o.getInt("c"),
+            kind = WeatherKind.valueOf(o.getString("k")),
+            day = o.getBoolean("d"),
+            high = intOrNull("h"),
+            low = intOrNull("l"),
+            humidity = intOrNull("rh"),
+            apparent = intOrNull("at"),
+            windKmh = intOrNull("ws"),
+            windDir = intOrNull("wd"),
+            days = days,
+            aqi = intOrNull("aqi"),
+            pm25 = intOrNull("pm"),
+            fetchedAt = o.optLong("t", 0),
+        )
+    }.getOrElse {
+        Log.w(TAG, "unreadable reading", it)
+        null
+    }
+
+    private fun WeatherNow.toJson(): String = JSONObject().apply {
+        put("c", celsius); put("k", kind.name); put("d", day); put("t", fetchedAt)
+        high?.let { put("h", it) }; low?.let { put("l", it) }
+        humidity?.let { put("rh", it) }; apparent?.let { put("at", it) }
+        windKmh?.let { put("ws", it) }; windDir?.let { put("wd", it) }
+        aqi?.let { put("aqi", it) }; pm25?.let { put("pm", it) }
+        put("days", JSONArray(days.map { JSONArray().put(it.date.toString()).put(it.kind.name).put(it.high).put(it.low) }))
+    }.toString()
 
     private var failed = false
 
@@ -85,6 +160,11 @@ object Weather {
         if (!started) return
         val since = System.currentTimeMillis() - lastAttempt
         if (since >= REFRESH_MS || (failed && (networkCameUp || since >= RETRY_MS))) refresh()
+    }
+
+    /** A new reading whatever its age: the weather page's own refresh. */
+    fun refreshNow() {
+        if (started) refresh()
     }
 
     private fun refresh() {
@@ -99,7 +179,9 @@ object Weather {
             if (reading != null) {
                 now = reading
                 prefs.edit {
-                    putLong("fetched_at", System.currentTimeMillis())
+                    putLong("fetched_at", reading.fetchedAt)
+                    putString("reading", reading.toJson())
+                    // Kept for a copy of Aerial older than the weather page.
                     putInt("celsius", reading.celsius)
                     putString("kind", reading.kind.name)
                     putBoolean("day", reading.day)
@@ -134,18 +216,74 @@ object Weather {
                 putLong("located_at", System.currentTimeMillis())
             }
         }
-        val json = JSONObject(get("https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min&forecast_days=1&timezone=auto"))
+        val json = JSONObject(
+            get(
+                "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon" +
+                    "&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,is_day," +
+                    "wind_speed_10m,wind_direction_10m" +
+                    "&daily=weather_code,temperature_2m_max,temperature_2m_min" +
+                    "&forecast_days=$FORECAST_DAYS&timezone=auto",
+            ),
+        )
         val current = json.getJSONObject("current")
         val daily = json.optJSONObject("daily")
+        val dates = daily?.optJSONArray("time")
+        val codes = daily?.optJSONArray("weather_code")
+        val highs = daily?.optJSONArray("temperature_2m_max")
+        val lows = daily?.optJSONArray("temperature_2m_min")
+        val days = (0 until (dates?.length() ?: 0)).mapNotNull { i ->
+            val date = runCatching { LocalDate.parse(dates!!.getString(i)) }.getOrNull() ?: return@mapNotNull null
+            val high = highs?.optDouble(i, Double.NaN)?.takeIf { !it.isNaN() }?.roundToInt() ?: return@mapNotNull null
+            val low = lows?.optDouble(i, Double.NaN)?.takeIf { !it.isNaN() }?.roundToInt() ?: return@mapNotNull null
+            WeatherDay(date, kindOf(codes?.optInt(i, 0) ?: 0), high, low)
+        }
         fun today(key: String) = daily?.optJSONArray(key)?.optDouble(0)?.takeIf { !it.isNaN() }?.roundToInt()
+        val air = air(lat, lon)
         return WeatherNow(
             celsius = current.getDouble("temperature_2m").roundToInt(),
             kind = kindOf(current.getInt("weather_code")),
             day = current.optInt("is_day", 1) == 1,
             high = today("temperature_2m_max"),
             low = today("temperature_2m_min"),
+            humidity = current.optDouble("relative_humidity_2m", Double.NaN).takeIf { !it.isNaN() }?.roundToInt(),
+            apparent = current.optDouble("apparent_temperature", Double.NaN).takeIf { !it.isNaN() }?.roundToInt(),
+            windKmh = current.optDouble("wind_speed_10m", Double.NaN).takeIf { !it.isNaN() }?.roundToInt(),
+            windDir = current.optInt("wind_direction_10m", -1).takeIf { it >= 0 },
+            days = days,
+            aqi = air?.first,
+            pm25 = air?.second,
+            fetchedAt = System.currentTimeMillis(),
         )
     }
+
+    /**
+     * China's AQI (HJ 633-2012) from PM2.5 and PM10, as a Chinese weather app shows it; null when
+     * the air service does not answer, which the weather itself does not depend on.
+     */
+    private fun air(lat: Float, lon: Float): Pair<Int, Int>? = runCatching {
+        val json = JSONObject(
+            get("https://air-quality-api.open-meteo.com/v1/air-quality?latitude=$lat&longitude=$lon&current=pm2_5,pm10&timezone=auto"),
+        )
+        val current = json.getJSONObject("current")
+        val pm25 = current.optDouble("pm2_5", Double.NaN)
+        val pm10 = current.optDouble("pm10", Double.NaN)
+        val aqi = listOfNotNull(iaqi(pm25, PM25_BREAKS), iaqi(pm10, PM10_BREAKS)).maxOrNull() ?: return null
+        aqi to pm25.roundToInt()
+    }.onFailure { Log.w(TAG, "air quality unavailable", it) }.getOrNull()
+
+    /** One pollutant's AQI: its 24 h bands in [breaks], China's five AQI bands above them. */
+    private fun iaqi(concentration: Double, breaks: List<Pair<Double, Double>>): Int? {
+        if (concentration.isNaN() || concentration < 0) return null
+        val i = breaks.indexOfFirst { concentration <= it.second }.let { if (it < 0) breaks.lastIndex else it }
+        val (low, high) = breaks[i]
+        val (aqiLow, aqiHigh) = AQI_BANDS[i]
+        val share = if (high == low) 0.0 else (concentration - low) / (high - low)
+        return (aqiLow + share * (aqiHigh - aqiLow)).roundToInt()
+    }
+
+    private val AQI_BANDS = listOf(0 to 50, 50 to 100, 100 to 150, 150 to 200, 200 to 300, 300 to 400, 400 to 500)
+    private val PM25_BREAKS = listOf(0.0 to 35.0, 35.0 to 75.0, 75.0 to 115.0, 115.0 to 150.0, 150.0 to 250.0, 250.0 to 350.0, 350.0 to 500.0)
+    private val PM10_BREAKS = listOf(0.0 to 50.0, 50.0 to 150.0, 150.0 to 250.0, 250.0 to 350.0, 350.0 to 420.0, 420.0 to 500.0, 500.0 to 600.0)
 
     /**
      * A place chosen before 1.29 came from Open-Meteo's geocoder, which took 安庆 for a village in
