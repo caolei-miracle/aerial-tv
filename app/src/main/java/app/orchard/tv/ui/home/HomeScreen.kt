@@ -734,13 +734,20 @@ fun HomeScreen(
             // GPU draws every tile again under the panel each frame. Lite there lets the clock and
             // the tiles fade out under the panel's veil; the wallpaper and plate stay.
             val shedUnderPanel = Build.VERSION.SDK_INT < Build.VERSION_CODES.N && AerialSettings.lite
+            // The weather page is a page of its own, not a panel beside Home: the clock, the weather
+            // lines and the tiles go while it is open. At 12% they still read through it, the white
+            // clock most of all, and sat inside the page's own type.
+            val pageCover by animateFloatAsState(
+                if (overlay is Overlay.Weather) 1f else 0f,
+                tween(260, easing = Motion.EaseOut), label = "page-cover",
+            )
             Box(
                 Modifier
                     .fillMaxSize()
                     .offset { IntOffset(0, -scroll.value.roundToInt()) }
                     .then(
-                        if (shedUnderPanel) Modifier.graphicsLayer {
-                            alpha = 1f - backdropVeil
+                        if (shedUnderPanel || pageCover > 0.01f) Modifier.graphicsLayer {
+                            alpha = (1f - pageCover) * (if (shedUnderPanel) 1f - backdropVeil else 1f)
                             compositingStrategy = CompositingStrategy.ModulateAlpha
                         } else Modifier,
                     ),

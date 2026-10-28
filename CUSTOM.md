@@ -10,6 +10,16 @@ Not meant for a pull request: it is our own line of changes, kept on top of `mai
 | Version name | `1.67-weather` |
 | Signing key | `local/aerial-custom.jks`, alias `aerial`, SHA-256 `3459af817ccbfed38b10eff9923662d5a3d9c889ac4f509d19c465a0763e0558` |
 
+## Where it runs
+
+| TV | Android | Installed | Build |
+|---|---|---|---|
+| MiTV4-ANSM0 (`192.168.1.10`) | 6.0.1 | 2026-10-28 | `1.67-weather`, versionCode 81 |
+
+Home Guard is on (accessibility list), `keep_adb` on, notification listener on. The official 1.62
+was uninstalled for the different signature, so this TV's settings were reset once; from here on
+`install -r` is enough.
+
 ## What it adds
 
 1. **More weather under the clock.** Greeting and lunar date, the weather, and the next three
