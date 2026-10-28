@@ -517,6 +517,9 @@ private const val GRID_SHADE = 0.55f
 /** How much the plate swells as it dissolves into the grid's background. */
 private val PlateSwell = 14.dp
 
+/** Air between the plate's top edge and the bottom of the focused app's name above it. */
+private val PlateTitleLift = 8.dp
+
 /** The plate's tint: the frosted picture a little darker, lifted with white, so it reads as milky glass. */
 private val PlateTint = floatArrayOf(
     0.8f, 0f, 0f, 0f, 30f,
@@ -847,9 +850,10 @@ fun StatusPill(
 }
 
 /**
- * The focused app's name at the top left of the glass plate, as tvOS 26 has it: it crossfades as
- * focus moves along the row and fades out with the row over the grid, and it stays within the band
- * the plate grew for it ([GridMetrics.titleRoom]), so it never reaches the weather line above.
+ * The focused app's name at the top left of the plate, as tvOS 26 has it: above the glass, on the
+ * wallpaper, not inside it, so the plate keeps the height the tiles need. It crossfades as focus
+ * moves along the row and fades out with the row over the grid, and it stays within the band Home
+ * reserved for it ([GridMetrics.titleRoom]), so it never reaches the weather line above.
  *
  * @param fade the plate's own fade, read while drawing, so the name goes with it.
  */
@@ -869,7 +873,12 @@ fun PlateTitle(
         label = "plate-title",
     )
     if (present < 0.005f) return
-    Box(modifier.height(room), contentAlignment = Alignment.CenterStart) {
+    // Bottom-aligned in its band with a little air under it: the name sits just over the plate's
+    // edge rather than resting on it.
+    Box(
+        modifier.height(room).padding(bottom = PlateTitleLift),
+        contentAlignment = Alignment.BottomStart,
+    ) {
         Crossfade(
             shown,
             animationSpec = tween(150, easing = Motion.EaseOut),
@@ -884,8 +893,8 @@ fun PlateTitle(
                 style = Type.LargeTitle.copy(
                     fontSize = 28.sp,
                     color = Color.White,
-                    // Over the glass it reads on its own; the shadow only steadies it on a bright one.
-                    shadow = Shadow(Color.Black.copy(alpha = 0.35f), blurRadius = 10f),
+                    // On the wallpaper, not on the glass: the shadow is what keeps it off a bright picture.
+                    shadow = Shadow(Color.Black.copy(alpha = 0.45f), blurRadius = 12f),
                 ),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

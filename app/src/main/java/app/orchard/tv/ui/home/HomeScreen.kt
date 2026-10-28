@@ -137,8 +137,8 @@ private val LargeClockTopMin = 28.dp
 private val PlateNameRoom = 28.dp
 
 /**
- * How much the plate grows upward to hold the focused app's name at its top left, as tvOS 26 has it
- * (the name over the glass, not under the tile): a 28 sp line, with a little air above and below.
+ * How much room the focused app's name takes above the plate, as tvOS 26 has it (the name on the
+ * wallpaper over the glass, not in it): a 28 sp line, with a little air above and below.
  */
 private val PlateTitleRoom = 42.dp
 
@@ -147,7 +147,7 @@ private val PlateTitleMin = 28.dp
 
 /**
  * Where the large clock's weather line really ends: [LargeClockHeight] keeps 16 dp of air under it,
- * which the name's plate may borrow, and [PlateTitleGap] of air is left between them still.
+ * which the name's band may borrow, and [PlateTitleGap] of air is left between them still.
  */
 private val PlateTitleSlack = 16.dp
 private val PlateTitleGap = 10.dp
@@ -241,19 +241,23 @@ private class GridMetrics(screenW: Dp, screenH: Dp, val columns: Int, oneRow: Bo
     val restY = maxOf(screenH * 0.37f, RowAboveTop + pitchY)
     val screenH = screenH
 
+    /** The plate's top edge, above the top row by its padding. The name goes above this, off the glass. */
+    val plateTop: Dp = topRowY - PlatePadV
+
     /**
-     * How far the plate grows upward for the focused app's name at its top left (PlateTitle), 0 when
-     * it does not: with no plate, or every name already on it. Never up into the weather line: what
-     * the clock leaves under it, less a gap, capped at the room a name needs. Under that the name is
-     * left off rather than squeezed.
+     * How much room the focused app's name takes above the plate (PlateTitle), 0 when it has none:
+     * with no plate, or every name already on it. The plate itself keeps its height: the name sits
+     * on the wallpaper above it, as on tvOS 26, so the glass does not grow and read as a slab.
+     * Never up into the weather line: what the clock leaves under it, less a gap, capped at the
+     * room a name needs. Under that the name is left off rather than squeezed.
      */
     val titleRoom: Dp = if (!title || !plate) 0.dp else {
         val ceiling = if (largeClock) clockY + LargeClockHeight - PlateTitleSlack + PlateTitleGap else 0.dp
-        (topRowY - PlatePadV - ceiling).coerceAtMost(PlateTitleRoom).takeIf { it >= PlateTitleMin } ?: 0.dp
+        (plateTop - ceiling).coerceAtMost(PlateTitleRoom).takeIf { it >= PlateTitleMin } ?: 0.dp
     }
 
-    /** Where that name's band starts: the plate's top edge, now [titleRoom] higher. */
-    val titleY: Dp = topRowY - PlatePadV - titleRoom
+    /** Where that band starts: [titleRoom] above the plate's unchanged top edge. */
+    val titleY: Dp = plateTop - titleRoom
 
     /**
      * How far the grid scrolls before the shelf has given way: the clock and the plate fade over
@@ -693,7 +697,7 @@ fun HomeScreen(
                 val second = if (metrics.shelfRows > 1) metrics.shelfSecond else 0.dp
                 Rect(
                     (metrics.margin - PlatePadH).toPx(),
-                    metrics.titleY.toPx(),
+                    metrics.plateTop.toPx(),
                     (metrics.margin + metrics.pitchX * (columns - 1) + metrics.tileW + PlatePadH).toPx(),
                     (metrics.topRowY + metrics.tileH + PlatePadV + metrics.firstGap + second).toPx(),
                 )
@@ -787,8 +791,8 @@ fun HomeScreen(
                     )
                 }
 
-                // The focused app's name on the glass plate, at its top left, as tvOS 26 shows it:
-                // on the plate the top row's names are off the tiles, so this is where they read.
+                // The focused app's name above the glass plate, at its top left, as tvOS 26 shows
+                // it: on the plate the top row's names are off the tiles, so this is where they read.
                 // Only while focus is on the shelf, with nothing over Home.
                 if (metrics.titleRoom > 0.dp) {
                     val titled = apps.getOrNull(focusedIndex)?.takeIf {
