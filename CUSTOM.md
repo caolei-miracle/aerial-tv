@@ -14,7 +14,7 @@ Not meant for a pull request: it is our own line of changes, kept on top of `mai
 
 | TV | Android | Installed | Build |
 |---|---|---|---|
-| MiTV4-ANSM0 (`192.168.1.10`) | 6.0.1 | 2026-10-28 | `1.67-weather` 82; rebased build `1.78-weather` 102 pending install |
+| MiTV4-ANSM0 (`192.168.1.10`) | 6.0.1 | 2026-11-02 | `1.78-weather` 103 (installed over 82, settings kept) |
 
 Home Guard is on (accessibility list), `keep_adb` on, notification listener on. The official 1.62
 was uninstalled for the different signature, so this TV's settings were reset once; from here on
