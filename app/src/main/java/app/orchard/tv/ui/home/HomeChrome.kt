@@ -662,7 +662,7 @@ fun ShelfClock(
         val greeting = greetingOf(now.hour)
         BasicText(
             buildAnnotatedString {
-                if (greeting != null) withStyle(SpanStyle(color = dim, fontWeight = FontWeight.W500)) { append("$greeting  ") }
+                if (greeting != null) withStyle(SpanStyle(fontWeight = FontWeight.W500)) { append("$greeting  ") }
                 append(dateText(now))
                 if (lunar != null) withStyle(second) { append("  $lunar") }
             },
