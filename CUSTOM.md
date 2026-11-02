@@ -6,15 +6,15 @@ Not meant for a pull request: it is our own line of changes, kept on top of `mai
 | | |
 |---|---|
 | Branch | `custom/weather-title` (fork: `caolei-miracle/aerial-tv`) |
-| Baseline | upstream `a07a6ae` — Aerial 1.67, versionCode 81 |
-| Version name | `1.67-weather` |
+| Baseline | upstream `74b135d` — Aerial 1.78, versionCode 101 (rebased from 1.67 `a07a6ae` on 2026-11-02) |
+| Version name | `1.78-weather` |
 | Signing key | `local/aerial-custom.jks`, alias `aerial`, SHA-256 `3459af817ccbfed38b10eff9923662d5a3d9c889ac4f509d19c465a0763e0558` |
 
 ## Where it runs
 
 | TV | Android | Installed | Build |
 |---|---|---|---|
-| MiTV4-ANSM0 (`192.168.1.10`) | 6.0.1 | 2026-10-28 | `1.67-weather`, versionCode 82 |
+| MiTV4-ANSM0 (`192.168.1.10`) | 6.0.1 | 2026-10-28 | `1.67-weather` 82; rebased build `1.78-weather` 102 pending install |
 
 Home Guard is on (accessibility list), `keep_adb` on, notification listener on. The official 1.62
 was uninstalled for the different signature, so this TV's settings were reset once; from here on
