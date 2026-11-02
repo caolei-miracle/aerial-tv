@@ -716,6 +716,13 @@ fun HomeScreen(
             }
             // Another wallpaper chosen: nothing shows through until the new one has a frame.
             LaunchedEffect(Wallpapers.selectedId) { filmCover.snapTo(0f) }
+            // The weather page is a page of its own, not a panel beside Home: the clock, the weather
+            // lines, the tiles and the plate go while it is open. At 12% they still read through it,
+            // the white clock most of all, and sat inside the page's own type.
+            val pageCover by animateFloatAsState(
+                if (overlay is Overlay.Weather) 1f else 0f,
+                tween(260, easing = Motion.EaseOut), label = "page-cover",
+            )
             // The aerial film's own glass for the grid: the one playing or stopped, else the one
             // the picture was taken from.
             val pictureClip = remember(Wallpapers.backdrop) { Wallpapers.livePictureSpot()?.first }
@@ -744,18 +751,12 @@ fun HomeScreen(
                 wallpaper = Wallpapers.selectedId,
                 glassAwaitsStop = Wallpapers.selectedId == Wallpapers.LIVE && clipGlass == null,
                 gridGlass = clipGlass,
+                pageCover = { pageCover },
             )
 
             // Before Android 7 there is no picture of Home under Control Center (issue #466), so the
             // GPU draws every tile again under the panel each frame. Lite there once let the clock and
             // tiles fade out under the veil; Home looked gone behind the panel (issue #823), so they stay.
-            // The weather page is a page of its own, not a panel beside Home: the clock, the weather
-            // lines and the tiles go while it is open. At 12% they still read through it, the white
-            // clock most of all, and sat inside the page's own type.
-            val pageCover by animateFloatAsState(
-                if (overlay is Overlay.Weather) 1f else 0f,
-                tween(260, easing = Motion.EaseOut), label = "page-cover",
-            )
             Box(
                 Modifier
                     .fillMaxSize()
