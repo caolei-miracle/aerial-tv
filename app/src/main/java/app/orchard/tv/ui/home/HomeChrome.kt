@@ -263,6 +263,12 @@ fun HomeBackground(
     glassAwaitsStop: Boolean = false,
     /** The grid's own glass, where it is not the picture's ([frosted]): the aerial film's (Wallpapers.clipGlass). */
     gridGlass: ImageBitmap? = null,
+    /**
+     * How far a page of its own covers Home (the weather page): the plate goes with the clock and
+     * the tiles, or its empty band stayed under the page's last line, a shelf with nothing on it.
+     * The wallpaper stays: the page is read over it.
+     */
+    pageCover: () -> Float = { 0f },
 ) {
     val shade = remember { Images.homeShade.asImageBitmap() }
     Box(Modifier.fillMaxSize()) {
@@ -289,7 +295,7 @@ fun HomeBackground(
             // ([filmGlass], every 15 s), so it is not the colours of a shot long gone.
             val still = Wallpapers.filmGlassless && Wallpapers.moves() && (frosted ?: backdrop) != null
             val film = filmGlass.takeUnless { Wallpapers.filmGlassless }
-            Plate(if (still) filmGlass ?: frosted ?: backdrop else frosted ?: backdrop, film, film != null, Wallpapers.filmGlassless, plate, scroll, collapse, cover, filmStopped, toSaver, lift, still)
+            Plate(if (still) filmGlass ?: frosted ?: backdrop else frosted ?: backdrop, film, film != null, Wallpapers.filmGlassless, plate, scroll, collapse, cover, filmStopped, toSaver, lift, still, pageCover)
         }
     }
 }
@@ -388,14 +394,14 @@ private fun Pictures(
  * moves or a new frame fades in, every [GLASS_EVERY_MS]: the film plays with Compose all but still.
  */
 @Composable
-private fun Plate(glass: ImageBitmap?, film: ImageBitmap?, filmPlate: Boolean, deepSmoke: Boolean, plate: Rect?, scroll: () -> Float, collapse: Float, cover: () -> Float, filmStopped: () -> Float, toSaver: () -> Float, lift: () -> Float, stillOverFilm: Boolean = false) {
+private fun Plate(glass: ImageBitmap?, film: ImageBitmap?, filmPlate: Boolean, deepSmoke: Boolean, plate: Rect?, scroll: () -> Float, collapse: Float, cover: () -> Float, filmStopped: () -> Float, toSaver: () -> Float, lift: () -> Float, stillOverFilm: Boolean = false, pageCover: () -> Float = { 0f }) {
     var shown by remember { mutableStateOf(glass) }
     var under by remember { mutableStateOf<ImageBitmap?>(null) }
     val swap = remember { Animatable(1f) }
     fun visibility(): Float {
         val rest = 1f - smooth(((scroll() / collapse).coerceIn(0f, 1f) / 0.55f).coerceIn(0f, 1f))
         // [stillOverFilm]: the still plate over the film too, moving or not.
-        return rest * (if (stillOverFilm) 1f else 1f - cover() * (1f - filmStopped())) * (1f - toSaver())
+        return rest * (if (stillOverFilm) 1f else 1f - cover() * (1f - filmStopped())) * (1f - toSaver()) * (1f - pageCover())
     }
     LaunchedEffect(glass) {
         if (glass === shown) return@LaunchedEffect
@@ -468,7 +474,7 @@ private fun Plate(glass: ImageBitmap?, film: ImageBitmap?, filmPlate: Boolean, d
         // The film's plate, while the film shows and the plate over a picture does not hide it.
         // With no frame to frost (an input's picture, which cannot be copied) it is the smoke and
         // the lit edge alone, so the top row keeps a plate over anything.
-        val base = (1f - smooth(((scroll() / collapse).coerceIn(0f, 1f) / 0.55f).coerceIn(0f, 1f))) * (1f - toSaver())
+        val base = (1f - smooth(((scroll() / collapse).coerceIn(0f, 1f) / 0.55f).coerceIn(0f, 1f))) * (1f - toSaver()) * (1f - pageCover())
         val frame = filmTop
         val edge = smoke
         if (!stillOverFilm && edge != null && (filmPlate || cover() > 0.01f) && alpha < 0.99f && base > 0.01f) {
