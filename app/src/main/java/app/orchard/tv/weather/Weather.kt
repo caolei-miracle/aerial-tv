@@ -329,6 +329,7 @@ object Weather {
         return null
     }
 
+    /**
      * China's AQI (HJ 633-2012) from PM2.5 and PM10, as a Chinese weather app shows it; null when
      * the air service does not answer, which the weather itself does not depend on.
      */
