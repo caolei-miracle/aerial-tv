@@ -191,10 +191,12 @@ fun WallpaperSheet(
                         AerialSettings.wallpaperAlwaysMoves, AerialSettings::chooseWallpaperAlwaysMoves, first = true,
                     )
                 }
-                // Only for "My Photos, in turn": how often the next photo comes (issue #1314).
-                if (Wallpapers.selectedId == Wallpapers.ROTATE_PHOTOS) Group { note ->
+                // For "My Photos, in turn" and the poster wall: how often the next one comes (issue #1314).
+                if (Wallpapers.selectedId == Wallpapers.ROTATE_PHOTOS || Wallpapers.selectedId == Wallpapers.POSTERS) Group { note ->
+                    val rotateWall = Wallpapers.selectedId == Wallpapers.POSTERS
                     Choices(
-                        R.string.st_photo_every, stringResource(R.string.st_photo_every_hint), note,
+                        if (rotateWall) R.string.st_wall_every else R.string.st_photo_every,
+                        stringResource(if (rotateWall) R.string.st_wall_every_hint else R.string.st_photo_every_hint), note,
                         AerialSettings.PHOTO_MINUTES.map { m ->
                             m to when {
                                 m >= AerialSettings.DAY_MINUTES -> stringResource(R.string.st_photo_every_day)

@@ -7,7 +7,7 @@ Not meant for a pull request: it is our own line of changes, kept on top of `mai
 |---|---|
 | Branch | `custom/weather-title` (fork: `caolei-miracle/aerial-tv`) |
 | Baseline | upstream `b7c3624` — Aerial 2.0, versionCode 148 (rebased from 1.96 `904cdd3` on 2026-11-17) |
-| Version name | `2.0-custom` (versionCode 149) |
+| Version name | `2.0-custom-posters` (versionCode 150) |
 | Signing key | `local/aerial-custom.jks`, alias `aerial`, SHA-256 `3459af817ccbfed38b10eff9923662d5a3d9c889ac4f509d19c465a0763e0558` |
 
 ## Where it runs
@@ -17,6 +17,7 @@ Not meant for a pull request: it is our own line of changes, kept on top of `mai
 | MiTV4-ANSM0 (`192.168.1.10`) | 6.0.1 | 2026-11-02 | `1.80-weather` 105 (installed over 103, settings kept) |
 | MiTV4-ANSM0 (`192.168.1.10`) | 6.0.1 | — | `1.96-weather` 138 (built 2026-11-17, not installed) |
 | MiTV4-ANSM0 (`192.168.1.10`) | 6.0.1 | — | `2.0-custom` 149 (built 2026-11-17, not yet installed) |
+| MiTV4-ANSM0 (`192.168.1.10`) | 6.0.1 | — | `2.0-custom-posters` 150 (built 2026-11-18, not yet installed) |
 
 Home Guard is on (accessibility list), `keep_adb` on, notification listener on. The official 1.62
 was uninstalled for the different signature, so this TV's settings were reset once; from here on
@@ -32,6 +33,16 @@ was uninstalled for the different signature, so this TV's settings were reset on
    name sits at its top left, as tvOS 26 has it. The band is capped by where the weather line
    really ends, so the two never meet; under 28 dp of room the name is left off instead.
 4. **Build for mainland China**: Aliyun/Tencent mirrors ahead of Google and Maven Central.
+5. **Poster wall wallpaper (from 150).** A still wall of this week's popular films and shows:
+   posters of different sizes in a staggered grid with one spanning 2×2 as the hero, and one large
+   picture on the right. It is baked into one bitmap, so it costs the TV nothing while Home runs.
+   Every rotation turn (default a day; pickable in settings) reshuffles the films with the turn as
+   the seed — a completely new wall. No tilt, flip or drift. TMDB's weekly trending when a key was
+   built in (`tmdb.key` in local.properties; DNS-pinned TLS + bundled roots for mainland China),
+   otherwise 24 posters bundled in assets. Code: `wallpaper/PosterWall.kt`. Patched-in wire-up in
+   `Wallpapers.kt` (a `Posters` kind and id), `WallpaperSheet.kt` (turn-frequency group), the two
+   strings.xml and build.gradle.kts (`TMDB_KEY`). A pre-rebase backup of the earlier tilted/flip
+   prototype lives in the workspace's `poster_wall_archive_20261113.patch`.
 
 ## How upstream updates are taken
 

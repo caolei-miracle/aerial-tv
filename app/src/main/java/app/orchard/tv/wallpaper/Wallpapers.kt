@@ -37,7 +37,7 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-enum class WallpaperKind { Daily, Builtin, Photo, Auto, Live, Video, Source }
+enum class WallpaperKind { Daily, Builtin, Photo, Auto, Live, Video, Source, Posters }
 
 data class Wallpaper(
     val id: String,
@@ -86,6 +86,8 @@ object Wallpapers {
     const val AUTO = "auto"
     const val ROTATE_PHOTOS = "photos:rotate"
     const val LIVE = "aerial:live"
+    /** The poster wall: a still grid of films' posters, reshuffled each rotation turn. */
+    const val POSTERS = PosterWall.ID
     const val VIDEOS = "videos:mine"
     const val VIDEO_PREFIX = "video:"
     const val SOURCE_PREFIX = "source:"
@@ -201,6 +203,15 @@ object Wallpapers {
         if (started) return
         started = true
         app = context.applicationContext
+        PosterWall.init(context)
+        // A new set of films: its card appears, and the wall behind Home is made again.
+        PosterWall.onNewWall = {
+            scope.launch {
+                synchronized(thumbs) { thumbs.remove(POSTERS) }
+                rebuildList()
+                if (selectedId == POSTERS) rebuildBackdrop()
+            }
+        }
         measure(context).let { (w, h) -> screenW = w; screenH = h }
         selectedId = (prefs.getString("selected", LATEST_DAILY) ?: LATEST_DAILY)
             // A built-in wallpaper from before the Mac-style set: its nearest one now.
@@ -258,6 +269,7 @@ object Wallpapers {
 
     fun select(id: String) {
         selectedId = id
+        if (id == POSTERS) PosterWall.ensureFresh()
         prefs.edit { putString("selected", id) }
         rebuildBackdrop()
     }
@@ -315,7 +327,7 @@ object Wallpapers {
      * and each minute while Home is in front.
      */
     fun rotateIfDue() {
-        if (!started || selectedId != ROTATE_PHOTOS || rotatedOn == photoSlot()) return
+        if (!started || (selectedId != ROTATE_PHOTOS && selectedId != POSTERS) || rotatedOn == photoSlot()) return
         rebuildBackdrop()
     }
 
@@ -345,6 +357,8 @@ object Wallpapers {
             ?: Gradients.render(Gradients.presets.first(), w, h)
         WallpaperKind.Video -> videoPicture(wp.id, w, h) ?: Gradients.render(Gradients.presets.first(), w, h)
         WallpaperKind.Source -> Gradients.byKey(SOURCE_PICTURE)?.let { Gradients.render(it, w, h) }
+        // The wall bakes its own darkening in; it is a still picture for one rotation turn.
+        WallpaperKind.Posters -> PosterWall.still(w, h, photoSlot())
     }
 
     /** The frame one of [id]'s films last stopped on, else the first film's poster or opening frame. */
@@ -428,8 +442,10 @@ object Wallpapers {
                 // Frosted from the picture before the home shading: the glass sits low on the
                 // screen, where the shading is darkest, and would read as a grey slab.
                 val frost = picture?.let(Images::frost)
-                // A film's picture is its frame as it was, as the film is not shaded (HomeBackground).
-                if (wp?.kind == WallpaperKind.Live || wp?.kind == WallpaperKind.Video) picture to frost
+                // A film's frame and the poster wall carry their own shading; not shaded again.
+                val unshaded = wp?.kind == WallpaperKind.Live || wp?.kind == WallpaperKind.Video ||
+                    wp?.kind == WallpaperKind.Posters
+                if (unshaded) picture to frost
                 else picture?.let(Images::shadeForHome) to frost
             }
             backdrop = bmp?.asImageBitmap()
@@ -454,10 +470,12 @@ object Wallpapers {
             WallpaperKind.Daily, WallpaperKind.Photo -> fileFor(wp)?.lastModified() ?: 0L
             WallpaperKind.Live -> liveFrame.lastModified()
             WallpaperKind.Video -> if (videoFrameIsOf(wp.id)) videoFrame.lastModified() else 0L
+            // The rotation turn reseeds the whole wall, so a new turn must rebake it.
+            WallpaperKind.Posters -> photoSlot()
             else -> 0L
         }
         // "clear": a film's picture baked unshaded, not one kept from when it was shaded.
-        val film = if (wp.kind == WallpaperKind.Live || wp.kind == WallpaperKind.Video) "|clear" else ""
+        val film = if (wp.kind == WallpaperKind.Live || wp.kind == WallpaperKind.Video || wp.kind == WallpaperKind.Posters) "|clear" else ""
         return "${wp.id}|$stamp|${screenW}x$screenH|${BuildConfig.VERSION_CODE}$film"
     }
 
@@ -797,13 +815,15 @@ object Wallpapers {
             .map { Wallpaper("photo:${it.nameWithoutExtension}", WallpaperKind.Photo, if (zh) "我的照片" else "My Photo") }
         val auto = Wallpaper(AUTO, WallpaperKind.Auto, if (zh) "跟随 App" else "Follow App")
         val live = Wallpaper(LIVE, WallpaperKind.Live, if (zh) "航拍" else "Aerial")
+        // Only offer the wall once its posters are here: an empty wall is no choice to offer.
+        val posters = if (PosterWall.ready()) listOf(Wallpaper(POSTERS, WallpaperKind.Posters, if (zh) "海报墙" else "Poster Wall")) else emptyList()
         // All of them in turn, then each on its own (#762); the pickers show the first only for two or more.
         val films = ScreensaverVideos.all(app)
         val videos = if (films.isEmpty()) emptyList() else
             listOf(Wallpaper(VIDEOS, WallpaperKind.Video, if (zh) "我的视频 · 轮播" else "My Videos, In Turn")) +
                 films.map { Wallpaper(VIDEO_PREFIX + it.id, WallpaperKind.Video, it.name.substringBeforeLast('.').ifBlank { it.name }) }
         val inputs = sources.map { (id, name) -> Wallpaper(SOURCE_PREFIX + id, WallpaperKind.Source, name) }
-        items = listOf(live) + videos + daily + builtins + photos + auto + inputs
+        items = listOf(live) + posters + videos + daily + builtins + photos + auto + inputs
     }
 
     // ---- daily photos ----
@@ -829,6 +849,7 @@ object Wallpapers {
      */
     fun refreshDailyIfStale(networkCameUp: Boolean = false) {
         if (!started) return
+        PosterWall.ensureFresh(networkCameUp)
         val since = System.currentTimeMillis() - lastDailyRefresh
         val due = since >= 6 * 60 * 60 * 1000L ||
             (dailyFailed && (networkCameUp || since >= 10 * 60 * 1000L)) ||
