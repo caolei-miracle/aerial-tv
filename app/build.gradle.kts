@@ -19,7 +19,7 @@ android {
         // Android 5.0. Compose 1.10 and later need 6.0, so the Compose BOM below stays on 1.9.
         minSdk = 21
         targetSdk = 34
-        versionCode = 150
+        versionCode = 151
         versionName = "2.0-custom-posters"
         // TMDB's key for the poster wall (PosterWall). Not in the repository: put
         // `tmdb.key=...` in local.properties. A build without it uses the 24 posters in assets.
