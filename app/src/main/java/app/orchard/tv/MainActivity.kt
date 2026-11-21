@@ -84,6 +84,7 @@ import app.orchard.tv.system.FrameStats
 import app.orchard.tv.wallpaper.AerialFormats
 import app.orchard.tv.wallpaper.ScreensaverMode
 import app.orchard.tv.system.SystemScreensaver
+import app.orchard.tv.system.WhaleyBoot
 import app.orchard.tv.system.Diagnostics
 import app.orchard.tv.system.MissingClipboard
 import app.orchard.tv.system.Sounds
@@ -217,6 +218,7 @@ class MainActivity : ComponentActivity() {
         }
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null && reopenAsHome()) return
+        WhaleyBoot.turnOffPowerLight(this)
         startReal(savedInstanceState)
     }
 
@@ -705,6 +707,12 @@ class MainActivity : ComponentActivity() {
             if (asked && !SystemScreensaver.startFirmware(this)) DiagLog.i("no system screensaver to start")
             return
         }
+        // Standby instead of a screensaver (issue #1436), on the timer only: Back must not put the
+        // TV to sleep. Where the guard cannot do it (it went off since), the clock shows instead.
+        if (Wallpapers.screensaver == ScreensaverMode.Sleep && !asked) {
+            if (HomeGuardService.sleep("screensaver")) return
+            DiagLog.i("standby chosen, but the guard cannot put the TV to sleep; the clock instead")
+        }
         // Aerials over the aerial wallpaper, or the owner's videos over their video wallpaper: Home
         // carries the wallpaper's film on, the same player in the same format, so there is no black
         // between them; the dream would be a new player in a new window, and showed black even in
@@ -782,20 +790,23 @@ class MainActivity : ComponentActivity() {
         // taking focus (TCL MT5879: a press 18 ms after onPause, focus gone 400 ms later), and a
         // timer set then would start the screensaver over the app's video (issue #974).
         if (!vm.resumed) return
-        if (AerialSettings.screensaverMinutes != AerialSettings.NEVER) {
+        val never = AerialSettings.screensaverMinutes == AerialSettings.NEVER
+        if (!never) {
             val idle = idleBeforeScreensaver()
             idleHandler.postDelayed(showScreensaver, idle)
             if (idle > SAVER_AHEAD_MS) idleHandler.postDelayed(prepareScreensaver, idle - SAVER_AHEAD_MS)
-            if (holdsOffTheDream() && window.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON == 0) {
-                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            }
         }
         // Not with "System": the firmware's screensaver is wanted then, and holding the screen on
         // held it off (Xiaomi's starts on its own timer, screen_saver_timeout).
-        else if (Wallpapers.screensaver != ScreensaverMode.System &&
-            window.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON == 0 && screenNeverOff()) {
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        }
+        val keepOn = Wallpapers.screensaver != ScreensaverMode.System &&
+            if (never) screenNeverOff() else holdsOffTheDream()
+        val held = window.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON != 0
+        if (keepOn && !held) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Let go once it is no longer wanted, as when "System" is chosen after a delay that held
+        // off the dream: the flag stayed until Aerial restarted, and neither the screen nor the
+        // firmware's screensaver went off (issue #1609, read from the code). Not while Aerial's
+        // own screensaver shows, which holds the screen itself until releaseScreen.
+        else if (!keepOn && held && !vm.screensaverVisible) window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
     /**
@@ -1018,6 +1029,7 @@ class MainActivity : ComponentActivity() {
             minuteReceiverOn = true
         }
         KidsWatch.homeInFront = true
+        Weather.whileShown(true)
         idleHandler.removeCallbacks(endHomeBounce)
         vm.homeBounce = false
         DiagLog.i("onResume; screensaver after ${idleBeforeScreensaver() / 1000} s")
@@ -1066,6 +1078,7 @@ class MainActivity : ComponentActivity() {
         vm.resumed = false
         if (minuteReceiverOn) { runCatching { unregisterReceiver(minuteReceiver) }; minuteReceiverOn = false }
         KidsWatch.homeInFront = false
+        Weather.whileShown(false)
         Updates.onHomePaused()
         DiagLog.i("onPause")
         leftForAnApp = openedAppSinceHome
