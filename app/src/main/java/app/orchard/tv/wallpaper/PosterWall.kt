@@ -85,8 +85,27 @@ object PosterWall {
     /** Addresses that have answered for [HOST]; the first is tried, then the ones DNS-over-HTTPS gives. */
     private val KNOWN_IPS = listOf("18.239.50.21")
     private const val IMG = "https://image.tmdb.org/t/p/w500"
+    /** The Movie card's full-screen still: a bigger, landscape picture. */
+    private const val BACKDROP_IMG = "https://image.tmdb.org/t/p/w1280"
 
-    class Poster(val id: Int, val title: String)
+    /**
+     * A film on the wall. [title] alone is enough for the A wall; the rest are for the Movie
+     * card (B) — fetched from TMDB and kept in the index. Blank fields are the offline fallback,
+     * which has pictures but no metadata.
+     */
+    class Poster(
+        val id: Int,
+        val title: String,
+        val overview: String = "",
+        val year: Int = 0,
+        val genres: String = "",
+        val rating: Float = 0f,
+        val runtime: Int = 0,
+        val backdrop: String = "", // TMDB backdrop path, e.g. /abc.jpg; "" = no still
+    ) {
+        /** A backdrop has been downloaded and is on disk. */
+        fun hasStill(): Boolean = backdrop.isNotBlank() && File(dir, "${id}_backdrop.jpg").exists()
+    }
 
     /** A rectangle on the wall, in the pixels of the draw it is for. */
     private class Cell(val left: Float, val top: Float, val w: Float, val h: Float)
@@ -108,7 +127,14 @@ object PosterWall {
     private var bakedW = 0
     private var bakedH = 0
     private var bakedBmp: Bitmap? = null
+    /** The Movie card's single still wall, baked separately from A's grid wall. */
+    private var featuredBmp: Bitmap? = null
+    private var featuredTurn = Long.MIN_VALUE
+    private var featuredW = 0
+    private var featuredH = 0
     private val tiles = HashMap<String, Bitmap>()
+    /** Landscape stills decoded for the Movie card, keyed by film id. */
+    private val stillCache = HashMap<Int, Bitmap>()
     private val offline by lazy { app.assets.list("posters").orEmpty().filter { it.endsWith(".jpg", true) }.sorted() }
 
     fun init(context: Context) {
@@ -117,6 +143,12 @@ object PosterWall {
         app = context.applicationContext
         refreshedAt = prefs.getLong("refreshed", 0L)
         posters = readIndex().ifEmpty { offlineIndex() }
+        // Migrating from the A-only build: the saved index has titles but no backdrop paths, so the
+        // Movie wall has nothing to show. Force one refresh to fetch the stills and metadata.
+        if (posters.isNotEmpty() && posters.none { it.backdrop.isNotBlank() } && BuildConfig.TMDB_KEY.isNotBlank()) {
+            Log.i(TAG, "init: old index without backdrops, refreshing for the Movie wall")
+            refreshedAt = 0L
+        }
         Log.i(TAG, "init: ${posters.size} posters (${if (BuildConfig.TMDB_KEY.isBlank()) "offline" else "tmdb"})")
     }
 
@@ -260,6 +292,82 @@ object PosterWall {
         })
     }
 
+    // ---- the Movie wall (B): one landscape still, with a card over it ----
+
+    /** The film the Movie wall is currently showing; the card reads this. Null until one is picked. */
+    var featured by mutableStateOf<Poster?>(null); private set
+
+    /** Films that have a downloaded still, in list order; the Movie wall only uses those. */
+    private fun withStills(): List<Poster> = posters.filter { it.hasStill() }
+
+    /**
+     * The Movie wall: one film's landscape still fills the screen, picked by [turn] so it changes
+     * with the rotation, just like A. Baked to one bitmap (the card over it is a live Composable).
+     * Falls back to a poster cut to fill when a film has no still, so the wall never goes blank.
+     */
+    fun featured(w: Int, h: Int, turn: Long): Bitmap? {
+        val pool = withStills()
+        if (pool.isEmpty()) return null
+        if (featuredBmp != null && turn == featuredTurn && w == featuredW && h == featuredH) return featuredBmp
+        val pick = pool[java.util.Random(turn).nextInt(pool.size)]
+        val out = createBitmap(w, h)
+        val c = Canvas(out)
+        val paint = Paint(Paint.FILTER_BITMAP_FLAG)
+
+        var bmp = stillCache[pick.id]
+        if (bmp == null) {
+            val f = File(dir, "${pick.id}_backdrop.jpg")
+            bmp = runCatching { android.graphics.BitmapFactory.decodeFile(f.path) }.getOrNull()
+            if (bmp != null) stillCache[pick.id] = bmp
+        }
+        if (bmp != null) {
+            // Cover the whole screen with the landscape still, centred.
+            val src = android.graphics.Rect(0, 0, bmp.width, bmp.height)
+            val scale = max(w / bmp.width.toFloat(), h / bmp.height.toFloat())
+            val dw = bmp.width * scale
+            val dh = bmp.height * scale
+            val dst = RectF((w - dw) / 2f, (h - dh) / 2f, (w + dw) / 2f, (h + dh) / 2f)
+            c.drawBitmap(bmp, src, dst, paint)
+        } else {
+            c.drawColor(BACKGROUND)
+        }
+        // Lighter than A's grid: the still is the point, and the card carries its own glass.
+        gradeFeatured(c, w, h)
+        featuredBmp = out
+        featuredTurn = turn
+        featuredW = w
+        featuredH = h
+        // Publish the film for the card only after the bitmap is ready, so card and wall agree.
+        featured = pick
+        return out
+    }
+
+    /** Darken the still enough for the clock (left) and the card (right) to read over it. */
+    private fun gradeFeatured(c: Canvas, w: Int, h: Int) {
+        val fw = w.toFloat()
+        val fh = h.toFloat()
+        val top = fh * 0.32f
+        c.drawRect(0f, 0f, fw, top, Paint().apply {
+            shader = LinearGradient(0f, 0f, 0f, top,
+                intArrayOf(0xD008080B.toInt(), 0x4D08080B.toInt(), 0x0008080B),
+                floatArrayOf(0f, 0.45f, 1f), Shader.TileMode.CLAMP)
+        })
+        val bottom = fh * 0.34f
+        c.drawRect(0f, fh - bottom, fw, fh, Paint().apply {
+            shader = LinearGradient(0f, fh - bottom, 0f, fh,
+                intArrayOf(0x0007070B, 0x6607070B.toInt(), 0xDE07070B.toInt()),
+                floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
+        })
+        // A soft shade behind the card's side, so white text holds on a bright still.
+        c.drawRect(fw * 0.55f, 0f, fw, fh, Paint().apply {
+            shader = LinearGradient(fw * 0.55f, 0f, fw, 0f,
+                intArrayOf(0x00000000, 0x4D000000.toInt()), floatArrayOf(0f, 1f), Shader.TileMode.CLAMP)
+        })
+    }
+
+    /** True when any film has a still, i.e. the Movie wall can be offered. */
+    fun hasMovies(): Boolean = withStills().isNotEmpty()
+
     // ---- the list ----
 
     fun ensureFresh(networkCameUp: Boolean = false) {
@@ -274,6 +382,13 @@ object PosterWall {
 
     private var refreshing = false
 
+    /** Everything TMDB's weekly list gives us for one film, before its pictures are downloaded. */
+    private data class Film(
+        val id: Int, val title: String, val poster: String, val backdrop: String,
+        val overview: String, val year: Int, val genres: String, val rating: Float,
+        val media: String, // "movie" or "tv", for the runtime lookup
+    )
+
     private suspend fun refresh() {
         if (refreshing) return
         refreshing = true
@@ -281,23 +396,32 @@ object PosterWall {
             val found = withContext(Dispatchers.IO) { fetchList() }
             if (found.isEmpty()) return
             val kept = mutableListOf<Poster>()
-            found.take(KEEP).forEach { (id, title, path) ->
-                val f = File(dir, "$id.jpg")
-                if (!f.exists() && !download(IMG + path, f)) return@forEach
-                kept += Poster(id, title)
+            found.take(KEEP).forEach { film ->
+                val f = File(dir, "${film.id}.jpg")
+                if (!f.exists() && !download(IMG + film.poster, f)) return@forEach
+                // A still is only for the Movie card; download it best-effort, never block the wall.
+                val still = File(dir, "${film.id}_backdrop.jpg")
+                if (film.backdrop.isNotBlank() && !still.exists()) download(BACKDROP_IMG + film.backdrop, still)
+                val runtime = runtimeOf(film.id, film.media)
+                kept += Poster(film.id, film.title, film.overview, film.year, film.genres,
+                    film.rating, runtime, film.backdrop)
             }
             if (kept.size < SLOTS) return
             writeIndex(kept)
             val keep = kept.map { "${it.id}.jpg" }.toSet()
-            dir.listFiles { f -> f.extension == "jpg" && f.name !in keep }?.forEach { it.delete() }
+            dir.listFiles { f ->
+                f.extension == "jpg" && f.name !in keep && !f.name.endsWith("_backdrop.jpg")
+            }?.forEach { it.delete() }
             posters = kept
             tiles.clear()
+            stillCache.clear()
             bakedBmp = null
+            featuredBmp = null
             version++
             onNewWall?.invoke()
             refreshedAt = System.currentTimeMillis()
             prefs.edit { putLong("refreshed", refreshedAt) }
-            Log.i(TAG, "kept ${kept.size} posters from TMDB")
+            Log.i(TAG, "kept ${kept.size} posters from TMDB (${kept.count { it.hasStill() }} with stills)")
         } catch (e: Exception) {
             Log.w(TAG, "the poster list could not be read", e)
         } finally {
@@ -305,9 +429,9 @@ object PosterWall {
         }
     }
 
-    /** (id, title, poster_path) of the week's films and series. */
-    private fun fetchList(): List<Triple<Int, String, String>> {
-        val out = mutableListOf<Triple<Int, String, String>>()
+    /** The week's films and series, with the metadata the Movie card needs. */
+    private fun fetchList(): List<Film> {
+        val out = mutableListOf<Film>()
         val seen = HashSet<Int>()
         for (page in 1..2) {
             val body = tmdbGet("/trending/all/week?language=zh-CN&page=$page") ?: break
@@ -318,11 +442,40 @@ object PosterWall {
                 val id = o.optInt("id")
                 if (path.isBlank() || id == 0 || !seen.add(id)) continue
                 val title = o.optString("title").ifBlank { o.optString("name") }
-                out += Triple(id, title, path)
+                val year = (o.optString("release_date").ifBlank { o.optString("first_air_date") })
+                    .take(4).toIntOrNull() ?: 0
+                val genres = o.optJSONArray("genre_ids")?.let { arr ->
+                    (0 until arr.length()).mapNotNull { arr.optInt(it).let(::genreName) }
+                        .take(3).joinToString(" / ")
+                }.orEmpty()
+                out += Film(
+                    id, title, path, o.optString("backdrop_path"),
+                    o.optString("overview"), year, genres,
+                    o.optDouble("vote_average").toFloat(),
+                    o.optString("media_type").ifBlank { "movie" },
+                )
                 if (out.size >= KEEP) return out
             }
         }
         return out
+    }
+
+    /** Runtime is only in a film's detail, not the weekly list. One small request per film. */
+    private fun runtimeOf(id: Int, media: String): Int {
+        val body = tmdbGet("/$media/$id?language=zh-CN") ?: return 0
+        return runCatching {
+            val o = JSONObject(body)
+            if (media == "tv") o.optJSONObject("last_episode_to_air")?.optInt("runtime") ?: 0
+            else o.optInt("runtime")
+        }.getOrDefault(0)
+    }
+
+    private fun genreName(id: Int): String? = when (id) {
+        28 -> "动作"; 12 -> "冒险"; 16 -> "动画"; 35 -> "喜剧"; 80 -> "犯罪"
+        99 -> "纪录"; 18 -> "剧情"; 10751 -> "家庭"; 14 -> "奇幻"; 36 -> "历史"
+        27 -> "恐怖"; 10402 -> "音乐"; 9648 -> "悬疑"; 10749 -> "爱情"; 878 -> "科幻"
+        10770 -> "电视电影"; 53 -> "惊悚"; 10752 -> "战争"; 37 -> "西部"
+        else -> null
     }
 
     private fun download(url: String, to: File): Boolean = runCatching {
@@ -339,14 +492,24 @@ object PosterWall {
         val arr = JSONArray(File(dir, "index.json").readText())
         (0 until arr.length()).mapNotNull { i ->
             val o = arr.getJSONObject(i)
-            val p = Poster(o.getInt("id"), o.optString("title"))
+            val p = Poster(
+                o.getInt("id"), o.optString("title"),
+                o.optString("overview"), o.optInt("year"), o.optString("genres"),
+                o.optDouble("rating").toFloat(), o.optInt("runtime"), o.optString("backdrop"),
+            )
             if (File(dir, "${p.id}.jpg").exists()) p else null
         }
     }.getOrDefault(emptyList())
 
     private fun writeIndex(list: List<Poster>) {
         val arr = JSONArray()
-        list.forEach { arr.put(JSONObject().put("id", it.id).put("title", it.title)) }
+        list.forEach {
+            arr.put(JSONObject()
+                .put("id", it.id).put("title", it.title)
+                .put("overview", it.overview).put("year", it.year)
+                .put("genres", it.genres).put("rating", it.rating.toDouble())
+                .put("runtime", it.runtime).put("backdrop", it.backdrop))
+        }
         File(dir, "index.json").writeText(arr.toString())
     }
 

@@ -843,6 +843,22 @@ fun HomeScreen(
                     )
                 }
 
+                // The Movie wall's card: opposite the clock so they never overlap. It is part of
+                // Home (not a panel), fading on scroll and hidden by the screensaver, like the clock.
+                if (Wallpapers.selectedId == Wallpapers.MOVIE && !vm.screensaverVisible) {
+                    MovieInfoCard(
+                        modifier = Modifier
+                            .diagLayer("movie-card")
+                            .align(if (clockRight) Alignment.TopStart else Alignment.TopEnd)
+                            .padding(horizontal = metrics.margin)
+                            .padding(top = metrics.clockY)
+                            .graphicsLayer {
+                                alpha = 1f - (scroll.value / collapsePx * 1.6f).coerceIn(0f, 1f)
+                                compositingStrategy = CompositingStrategy.ModulateAlpha
+                            },
+                    )
+                }
+
                 // The focused app's name above the glass plate, at its top left, as tvOS 26 shows
                 // it: on the plate the top row's names are off the tiles, so this is where they read.
                 // Only while focus is on the shelf, with nothing over Home.

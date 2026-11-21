@@ -91,6 +91,7 @@
     <string name="wp_live">Moving aerial films. They play while Home is on the top row (either row in two rows) and stop on the frame showing when you go further down to the apps, which stays as the picture; the next film picks up from there.</string>
     <string name="wp_photos_rotate">My Photos, in Turn</string>
     <string name="wp_posters">A still wall of this week\'s popular films and shows: posters of different sizes, one large picture on the right. The whole wall is rearranged to a fresh set each turn. No motion, so it is easy on the TV.</string>
+    <string name="wp_movie">A popular film\'s still fills the screen, with a card showing its title, year, genre, runtime, rating and synopsis. Changes to another film each turn.</string>
     <string name="wp_daily_note">Bing\'s photo of the day, changing to the new one every day.</string>
     <string name="wp_photos_rotate_note">Your photos in turn, the next one each day, or as often as you choose below.</string>
     <string name="st_photo_every">Next Photo</string>

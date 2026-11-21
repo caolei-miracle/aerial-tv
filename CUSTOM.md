@@ -7,7 +7,7 @@ Not meant for a pull request: it is our own line of changes, kept on top of `mai
 |---|---|
 | Branch | `custom/weather-title` (fork: `caolei-miracle/aerial-tv`) |
 | Baseline | upstream `b7c3624` — Aerial 2.0, versionCode 148 (rebased from 1.96 `904cdd3` on 2026-11-17) |
-| Version name | `2.0-custom-posters` (versionCode 152) |
+| Version name | `2.0-custom-movie` (versionCode 153) |
 | Signing key | `local/aerial-custom.jks`, alias `aerial`, SHA-256 `3459af817ccbfed38b10eff9923662d5a3d9c889ac4f509d19c465a0763e0558` |
 
 ## Where it runs
@@ -17,7 +17,8 @@ Not meant for a pull request: it is our own line of changes, kept on top of `mai
 | MiTV4-ANSM0 (`192.168.1.10`) | 6.0.1 | 2026-11-02 | `1.80-weather` 105 (installed over 103, settings kept) |
 | MiTV4-ANSM0 (`192.168.1.10`) | 6.0.1 | — | `1.96-weather` 138 (built 2026-11-17, not installed) |
 | MiTV4-ANSM0 (`192.168.1.10`) | 6.0.1 | — | `2.0-custom` 149 (built 2026-11-17, not yet installed) |
-| MiTV4-ANSM0 (`192.168.1.10`) | 6.0.1 | — | `2.0-custom-posters` 152 (built 2026-11-18, not yet installed) |
+| MiTV4-ANSM0 (`192.168.1.10`) | 6.0.1 | — | `2.0-custom-posters` 152 (built 2026-11-21, verified on TV) |
+| MiTV4-ANSM0 (`192.168.1.10`) | 6.0.1 | — | `2.0-custom-movie` 153 (built 2026-11-21, not yet installed) |
 
 Home Guard is on (accessibility list), `keep_adb` on, notification listener on. The official 1.62
 was uninstalled for the different signature, so this TV's settings were reset once; from here on
@@ -43,6 +44,15 @@ was uninstalled for the different signature, so this TV's settings were reset on
    `Wallpapers.kt` (a `Posters` kind and id), `WallpaperSheet.kt` (turn-frequency group), the two
    strings.xml and build.gradle.kts (`TMDB_KEY`). A pre-rebase backup of the earlier tilted/flip
    prototype lives in the workspace's `poster_wall_archive_20261113.patch`.
+6. **Movie wall wallpaper (from 153).** A second, separate wallpaper option alongside the poster
+   wall: one popular film's landscape still (`backdrop_path`) fills the screen, with a live card on
+   the right showing title, year, genre, runtime, rating and synopsis (from TMDB). The still is baked
+   to one bitmap like the poster wall; only the card is a Composable (`ui/home/MovieInfoCard.kt`),
+   using the existing `liquidGlass` so it stays cheap on the TV. It changes to another film on the
+   same rotation turn as the poster wall (default a day; pickable in settings). The card sits opposite
+   the large clock so they never overlap, and fades with the weather page. `Poster` now carries the
+   metadata and a `backdrop` path; the index format is backward-compatible (old A-only caches get
+   one refresh on upgrade to fetch the stills). The old A poster wall is untouched and still offered.
 
 ## How upstream updates are taken
 
