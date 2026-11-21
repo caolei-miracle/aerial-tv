@@ -6,8 +6,8 @@ Not meant for a pull request: it is our own line of changes, kept on top of `mai
 | | |
 |---|---|
 | Branch | `custom/weather-title` (fork: `caolei-miracle/aerial-tv`) |
-| Baseline | upstream `b7c3624` — Aerial 2.0, versionCode 148 (rebased from 1.96 `904cdd3` on 2026-11-17) |
-| Version name | `2.0-custom-movie` (versionCode 154) |
+| Baseline | upstream `0c75022` — Aerial 2.15, versionCode 157 (merged 2026-11-21; was 2.0 `b7c3624` / vc148) |
+| Version name | `2.15-custom-movie` (versionCode 158) |
 | Signing key | `local/aerial-custom.jks`, alias `aerial`, SHA-256 `3459af817ccbfed38b10eff9923662d5a3d9c889ac4f509d19c465a0763e0558` |
 
 ## Where it runs
@@ -20,6 +20,7 @@ Not meant for a pull request: it is our own line of changes, kept on top of `mai
 | MiTV4-ANSM0 (`192.168.1.10`) | 6.0.1 | 2026-11-21 | `2.0-custom-posters` 152 (verified on TV) |
 | MiTV4-ANSM0 (`192.168.1.10`) | 6.0.1 | 2026-11-21 | `2.0-custom-movie` 153 (installed over 152, settings kept; movie wall selected and verified on TV) |
 | MiTV4-ANSM0 (`192.168.1.10`) | 6.0.1 | 2026-11-21 | `2.0-custom-movie` 154 (installed over 153; smaller info card, trailer row removed, verified on TV) |
+| MiTV4-ANSM0 (`192.168.1.10`) | 6.0.1 | 2026-11-21 | `2.15-custom-movie` 158 (installed over 154; upstream 2.15 + all customs, verified on TV) |
 
 Home Guard is on (accessibility list), `keep_adb` on, notification listener on. The official 1.62
 was uninstalled for the different signature, so this TV's settings were reset once; from here on
